@@ -82,6 +82,7 @@ uint32_t tperiod = TIME_PERIOD;//125us = 8KHz;//1000us = 1ms//10000us = 10 ms //
     static uint8_t online = 0;
     int connsocket = -1;
     uint8_t lock_status = zBIT0_OPEN;
+    uint8_t lock_id = 0;
     uint8_t evt_auto = 1;
     uint32_t tmr_evt = 0;
     const char *lstatus[] = {"BUSY", "EMPTY"};
@@ -90,15 +91,15 @@ uint32_t tperiod = TIME_PERIOD;//125us = 8KHz;//1000us = 1ms//10000us = 10 ms //
     uint32_t rfid = 1234;
 
     const s_one_cmd all_cmds[MAX_CMD] = {
-        { 0, 3, {0x8a, 0, 1, 0, 0, 0, 0}, "OPEN_ZAMOK"}, // OPEN_ZAMOK = 1 //Команда «Разблокировать замок»
-        { 0, 4, {0x8a, 0, 2, 0, 0, 0, 0}, "TOUT_ZAMOK"}, // TOUT_ZAMOK = 2//Команда «Задать время изъятия транспорта»
+        { 0, 3, {0x8a, 0, 1, 0, 0, 0, 0}, "OPEN_LOCK"}, // OPEN_ZAMOK = 1 //Команда «Разблокировать замок»
+        { 0, 4, {0x8a, 0, 2, 0, 0, 0, 0}, "TOUT_LOCK"}, // TOUT_ZAMOK = 2//Команда «Задать время изъятия транспорта»
                                                       // Диапазон значения 4-го байта: 01Н-40Н, интервал времени: 0.5-32сек, шаг – 0.5сек.
-        { 0, 4, {0x8a, 0, 3, 0, 0, 0, 0}, "OUT_ZAMOK"},  // OUT_ZAMOK = 3//Команда «Выдать транспорт»
+        { 0, 4, {0x8a, 0, 3, 0, 0, 0, 0}, "OUT_LOCK"},  // OUT_ZAMOK = 3//Команда «Выдать транспорт»
                                                       // 4-й байт : 00Н – прекратить выдачу транспорта, 01Н – выдать транспорт.
-        { 0, 4, {0x8a, 0, 4, 0, 0, 0, 0}, "TIZ_ZAMOK"},  // TIZ_ZAMOK = 4// Команда «Задать время выдачи транспорта»
+        { 0, 4, {0x8a, 0, 4, 0, 0, 0, 0}, "TIZ_LOCK"},  // TIZ_ZAMOK = 4// Команда «Задать время выдачи транспорта»
                                                       // Диапазон значения 4-го байта: 01Н-F0Н, интервал времени: 5-1200сек(20мин), шаг–5сек.        
-        {10, 3, {0x8a, 0, 5, 0, 0, 0, 0}, "STAT_ZAMOK"}, // STAT_ZAMOK = 5 //Команда «Передать флаги состояния устройств замка»
-        { 0, 4, {0x8a, 0, 6, 0, 0, 0, 0}, "LED_ZAMOK"},  // LED_ZAMOK = 6 //Команда «Включение индикации «Мигание: Красный-зелёный»»
+        {10, 3, {0x8a, 0, 5, 0, 0, 0, 0}, "STAT_LOCK"}, // STAT_ZAMOK = 5 //Команда «Передать флаги состояния устройств замка»
+        { 0, 4, {0x8a, 0, 6, 0, 0, 0, 0}, "LED_LOCK"},  // LED_ZAMOK = 6 //Команда «Включение индикации «Мигание: Красный-зелёный»»
                                                       // 4-й байт : 1 - вкл., 0 - выкл.
         { 0, 6, {0xff, 0xff, 0xff, 0xff, 0x9a, 0xbf, 0}, "MODE_CTL"},// MODE_CTL = 7 //Команда «Включить режим прямого управления»
         {18, 6, {0xff, 0xff, 0xff, 0xff, 0x9a, 0xb2, 0}, "STAT_CTL"}, // STAT_CTL = 8 // Команда «Передать состояние Promix-CN.LN.01»
@@ -117,8 +118,8 @@ uint32_t tperiod = TIME_PERIOD;//125us = 8KHz;//1000us = 1ms//10000us = 10 ms //
         uint32_t gpio_num = (uint32_t)arg;
         if (gpio_num == GPIO_LOCK_PIN) {
             if (!tmr_evt) {
-                tmr_evt = get_tmr(_1s);
-                lock_status = zBIT0_CLOSE;//закрыть замок !
+                tmr_evt = get_tmr(_2s);
+                lock_status = zBIT0_CLOSE;//0 - закрыть замок !
                 gpio_set_level(GPIO_LOCK_LED, lock_status);
                 if (evt_queue) xQueueSendFromISR(evt_queue, &lock_status, NULL);
             }
@@ -215,7 +216,7 @@ static void periodic_timer_callback(void *arg)
             cmdLeds = ~cmdLeds;
             gpio_set_level(GPIO_RED_LED, cmdLeds);
         } else {
-            if (cmdLeds != LED_OFF) {
+            if (cmdLeds != LED_ON) {
             cmdLeds = LED_OFF;
                 gpio_set_level(GPIO_GREEN_LED, cmdLeds);
                 gpio_set_level(GPIO_RED_LED, cmdLeds);
@@ -529,24 +530,30 @@ int ret = 0;
             *(buf + 16) = 0x8A;// байт 16 – 8Аh – указатель количества замков Promix-SM307,
             *(buf + 17) = 1;   // байт 17 – количество замков Promix-SM307.
             ret = 18;
-            break;
+        break;
         case zSTAT: //10 byte // 8b 00 05 04 00 00 04 d2 01 6a
+        {
+            uint32_t rf = 0;
             *buf = 0x8b;
             ret += MIN_CMD_LEN;
-            *(buf + ret) = (uint8_t)(/*zBIT0_OPEN*/lock_status | zBIT2_ID);//флаги состояния
+            uint8_t byte = lock_status;
+            if (!lock_status) {//if lock closed -> rfid present
+                byte |= zBIT2_ID;
+                rf = htonl(rfid);
+            }    
+            *(buf + ret) = byte;//(uint8_t)(/*zBIT0_OPEN*/lock_status | zBIT2_ID);//флаги состояния
             //байт 4 – байт 0 (старший) номера идентификатора транспорта,
             //байт 5 – байт 1 номера идентификатора транспорта,
             //байт 6 – байт 2 номера идентификатора транспорта,
             //байт 7 – байт 3 (младший) идентификатора транспорта.
-            rfid = htonl(rfid);
             ret++;
-            memcpy(buf + ret, &rfid, sizeof(uint32_t));
+            memcpy(buf + ret, &rf, sizeof(uint32_t));
             ret += sizeof(uint32_t);
-            uint16_t crc = calcCRC(buf, ret);
-            crc = htons(crc);
+            uint16_t crc = htons(calcCRC(buf, ret));
             memcpy(buf + ret, &crc, sizeof(uint16_t));
             ret += sizeof(uint16_t);
-            break;
+        }    
+        break;
     }
 
     return ret;
@@ -562,7 +569,8 @@ uint8_t evtBuf[64];
 uint8_t er = 0;
 
     // create event = ack for zSTAT command
-    memcpy(evtBuf, all_cmds[4].data, all_cmds[4].dlen);
+    memcpy(evtBuf, all_cmds[zSTAT - 1].data, all_cmds[zSTAT - 1].dlen);
+    evtBuf[1] = lock_id;
     int dl = mkAck(zSTAT, evtBuf);
     if (dl) {
         if (send(connsocket, evtBuf, dl, MSG_DONTWAIT) != dl) er = 0x80;
@@ -740,10 +748,11 @@ uint32_t try = 0;
                                             case zTOUT:
                                             case zTIZ:
                                                 wait_len = 4;
-                                                break;
+                                            break;
                                             case CMD_MARKER1:
                                                 wait_len = MID_CMD_LEN;
-                                                break;
+                                            break;
+                                                default : wait_len = 3;
                                         }
                                     } 
                                     if ((lenr == MID_CMD_LEN) && (from_server[MID_CMD_LEN - 1] == cEVT)) wait_len = MAX_CMD_LEN;
@@ -764,14 +773,15 @@ uint32_t try = 0;
             if (rdy) {// Блок обработки полученной команды
                 rdy = 0;
                 tmr_cmd = 0;
-                sprintf(tmp, "data from server (%d) :", lenr);
-                for (i = 0; i < lenr; i++) sprintf(tmp+strlen(tmp), "%02X", from_server[i]);
+                sprintf(tmp, "data from server (%d):", lenr);
+                for (i = 0; i < lenr; i++) sprintf(tmp+strlen(tmp), " %02X", from_server[i]);
                 print_msg(1, TAGCLI, "%s\n", tmp);
                 //
                 ack_len = 0;
+                tmp[0] = '\0';
                 if (good) {// команда от сервера "валидная"
                     if (lenr > 4) {
-                        cmd_max = (cmd_max_t *)&from_server; 
+                        cmd_max = (cmd_max_t *)&from_server[0]; 
                         cmd = cmd_max->cmd;
                         switch (cmd) {
                             case cSTAT:
@@ -786,12 +796,13 @@ uint32_t try = 0;
                                 evt_auto = cmd_max->param & 1;
                             break;    
                         }
-                    } else if ((lenr == 3) || (lenr == 4)) {
-                        cmd_min = (cmd_min_t *)&from_server;
+                    } else {//if ((lenr == 3) || (lenr == 4)) {
+                        cmd_min = (cmd_min_t *)&from_server[0];
                         cmd = cmd_min->cmd;
+                        lock_id = cmd_min->id;
                         switch (cmd) {
                             case zLED:
-                                strcpy(tmp, "LED_ZAMOK ");
+                                strcpy(tmp, "LED_LOCK ");
                                 if (cmd_min->param) {
                                     strcat(tmp, "ON");
                                     cmdLedsEnable = 1;
@@ -803,7 +814,7 @@ uint32_t try = 0;
                             case zOPEN:
                                 lock_status = zBIT0_OPEN;//1;
                                 gpio_set_level(GPIO_LOCK_LED, lock_status);
-                                sprintf(tmp, "OPEN_ZAMOK %u", lock_status);
+                                strcpy(tmp, "OPEN_LOCK");
                                 if (evt_queue) {
                                     if (xQueueSend(evt_queue, (void *)&lock_status, (TickType_t)0) != pdPASS) {
                                         ESP_LOGE(TAGCLI, "Error while sending to evt_queue");
@@ -812,20 +823,20 @@ uint32_t try = 0;
                             break;
                             case zSTAT:
                                 ack_len = 10;
-                                strcpy(tmp, "STAT_ZAMOK");
+                                strcpy(tmp, "STAT_LOCK");
                             break;
                             case zTOUT:
-                                sprintf(tmp, "TOUT_ZAMOK %.1f", (float)(cmd_min->param * 0.5));
+                                sprintf(tmp, "TOUT_LOCK %.1f", (float)(cmd_min->param * 0.5));
                             break;
                             case zOUT:
-                                sprintf(tmp, "OUT_ZAMOK %u", cmd_min->param);
+                                sprintf(tmp, "OUT_LOCK %u", cmd_min->param);
                             break;
                             case zTIZ:
-                                sprintf(tmp, "TIZ_ZAMOK %u", cmd_min->param * 5);
+                                sprintf(tmp, "TIZ_LOCK %u", cmd_min->param * 5);
                             break;
 
                         }
-                        sprintf(tmp+strlen(tmp), " #%u", cmd_min->id & 0x1f);
+                        sprintf(tmp+strlen(tmp), " #%u", (cmd_min->id & 0x1f));
                     }
                     if (lenr >= 3) {
                         toScr(tmp);
@@ -837,10 +848,11 @@ uint32_t try = 0;
                     //    
                     if (ack_len) {// Блок формирования и отправки на сервер ответа на команду
                         ack_len = 0;
+                        memcpy(to_server, from_server, lenr);
                         dl = mkAck(cmd, to_server);
                         if (dl) {
-                            strcpy(tmp, "ack: ");
-                            for (i = 0; i < dl; i++) sprintf(tmp+strlen(tmp), "%02X", to_server[i]);
+                            sprintf(tmp, "ack (%u):", dl);
+                            for (i = 0; i < dl; i++) sprintf(tmp+strlen(tmp), " %02X", to_server[i]);
                             print_msg(1, TAGCLI, "%s\n", tmp);
                             resa = send(connsocket, to_server, dl, MSG_DONTWAIT);
                             if (resa != dl) {
@@ -1289,9 +1301,16 @@ void app_main()
                         (uint8_t *)mkLineCenter(stk, scr_data.fnt_w, NULL),
                         YELLOW);
             // send event to server 
-            if (online && evt_auto) {
-                if (sndEvt()) print_msg(1, TAGCLI, "Send event to server error.");
-            }    
+            if (byte != zBIT0_OPEN) {
+                if (online && evt_auto) {
+                    if (sndEvt()) {
+                        strcpy(stk, "Send event to server error.");
+                    } else {
+                        strcpy(stk, "Send event to server OK.");
+                    }   
+                    print_msg(1, TAGCLI, "%s\n", stk);    
+                }    
+            }
         }   
 #endif
 

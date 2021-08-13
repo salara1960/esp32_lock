@@ -352,19 +352,25 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
 
     #pragma pack(push,1)
     typedef struct {
-        uint8_t param;
-        uint8_t cmd;
+        uint8_t marker;
         uint8_t id;
-        uint8_t marker;  
+        uint8_t cmd;
+        uint8_t param;
+        //uint8_t cmd;
+        //uint8_t id;
+        //uint8_t marker;  
     } cmd_min_t;  
     #pragma pack(pop)
 
     #pragma pack(push,1)
     typedef struct {
-        uint8_t param;
-        uint8_t cmd;
+        uint32_t marker;
         uint8_t prefix;
-        uint32_t marker;  
+        uint8_t cmd;
+        uint8_t param;
+        //uint8_t cmd;
+        //uint8_t prefix;
+        //uint32_t marker;  
     } cmd_max_t;
     #pragma pack(pop)
 
