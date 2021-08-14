@@ -830,6 +830,17 @@ uint32_t try = 0;
                             break;
                             case zOUT:
                                 sprintf(tmp, "OUT_LOCK %u", cmd_min->param);
+                                if (cmd_min->param) {
+                                    lock_status = zBIT0_OPEN;//1 - отрыть замок !
+                                } else {
+                                    lock_status = zBIT0_CLOSE;//0 - закрыть замок !
+                                }
+                                gpio_set_level(GPIO_LOCK_LED, lock_status);
+                                if (evt_queue) {
+                                    if (xQueueSend(evt_queue, (void *)&lock_status, (TickType_t)0) != pdPASS) {
+                                        ESP_LOGE(TAGCLI, "Error while sending to evt_queue");
+                                    }
+                                }
                             break;
                             case zTIZ:
                                 sprintf(tmp, "TIZ_LOCK %u", cmd_min->param * 5);
