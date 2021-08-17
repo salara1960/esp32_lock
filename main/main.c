@@ -72,6 +72,8 @@ static uint16_t secFlag = SEC_FLAG_DEF;//8000;//1000;//100;//10
 static uint8_t led = LED_OFF;
 uint32_t tperiod = TIME_PERIOD;//125us = 8KHz;//1000us = 1ms//10000us = 10 ms //100000 us = 100 ms
 
+bool snd_id_flag = true;//no send ctl_id to server !
+
 #ifdef SET_PARK_CLI
     static const char *TAGCLI = "CLI";   
     xQueueHandle scr_queue = NULL;
@@ -250,9 +252,6 @@ int check_tmr(uint32_t tm)
     return (get_varta() >= tm ? 1 : 0);
 }
 //------------------------------------------------------------------------------------------------------------
-#ifdef SET_WIFI
-// Функции обслуживания WI-FI транспорта
-//
 bool check_pin(uint8_t pin_num)
 {
     gpio_pad_select_gpio(pin_num);
@@ -261,6 +260,10 @@ bool check_pin(uint8_t pin_num)
 
     return (bool)(gpio_get_level(pin_num));
 }
+//------------------------------------------------------------------------------------------------------------
+#ifdef SET_WIFI
+// Функции обслуживания WI-FI транспорта
+//
 //------------------------------------------------------------------------------------------------------------
 const char *wifi_auth_type(wifi_auth_mode_t m)
 {
@@ -686,11 +689,21 @@ uint32_t try = 0;
         wait_len = MIN_CMD_LEN;
         ack_len = 0;
         tmr_cmd = 0;
-#ifdef SEND_CTL_ID
-        faza  = 0; first = 1; 
-#else 
-        faza  = 1; first = 0; 
-#endif       
+
+        const s_ctl_id_t s_ctl_id = {MARKER_ID, CTL_ID};//{0xee, 333}
+
+        if (!snd_id_flag) {
+            faza  = 0; first = 1;
+
+            net_id = s_ctl_id.id;
+
+            print_msg(1, TAGCLI, "Mode 'send ctl_id' #%u to server\n", net_id);
+        } else {
+            faza  = 1; first = 0; 
+
+            print_msg(1, TAGCLI, "Mode 'NO send ctl_id' to server\n");
+        }
+     
         //
 
         while (!Vixod && !restart_flag) {
@@ -699,9 +712,11 @@ uint32_t try = 0;
                 case 0 :// Блок выдачи на сервер своего ID сразу после установки соединения
                     if (first) {
                         first = 0;
-                        dl = sprintf(tmp, "NET_CTL_ID=%u\n", net_id);
-                        print_msg(1, TAGCLI, "%s", tmp);
-                        resa = send(connsocket, tmp, dl, MSG_DONTWAIT);
+                        sprintf(tmp, "CTL_ID=%04X", net_id);
+                        print_msg(1, TAGCLI, "%s\n", tmp);
+                        dl = sizeof(s_ctl_id_t);
+                        memcpy(to_server, (uint8_t *)&s_ctl_id, dl);
+                        resa = send(connsocket, to_server, dl, MSG_DONTWAIT);
                         if (resa != dl) {
                             err |= 1;
                             Vixod = 1;
@@ -1037,6 +1052,10 @@ void app_main()
     //  - имя точки доступа, ключ подключения
 
     bool rt = true;
+
+    snd_id_flag = check_pin(GPIO_CTL_ID_PIN);
+    print_msg(0, TAGT, "=== CHECK CTL_ID_PIN %d LEVEL IS %d ===\n", GPIO_CTL_ID_PIN, snd_id_flag);
+
 
 #ifdef SET_WIFI
 

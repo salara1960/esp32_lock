@@ -133,6 +133,7 @@
 #define TIME_PERIOD 10000 //10000us = 10 ms// 1000 us = 1ms
 #define SEC_FLAG_DEF (1000000 / TIME_PERIOD) //((1000 / TIME_PERIOD) * 1000)
 
+#define GPIO_CTL_ID_PIN   15//snd_id_flag pin
 #define GPIO_CON_PIN      25//led connect pin
 #define GPIO_LOG_PIN      13//led tik pin
 #define GPIO_WIFI_PIN      4
@@ -260,9 +261,6 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
 #ifdef SET_ST7789
     #include "st7789.h"
     #include "fontx.h"
-    //#include "bmpfile.h"
-    //#include "pngle.h"
-    //#include "decode_image.h"
 
     #define INTERVAL 1500//400
     #define WAIT vTaskDelay(INTERVAL)
@@ -373,6 +371,20 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
         //uint32_t marker;  
     } cmd_max_t;
     #pragma pack(pop)
+
+
+
+    #define MARKER_ID 0x40
+    #define CTL_ID 333
+
+    #pragma pack(push,1)
+    typedef struct {
+        uint8_t marker;
+        uint32_t id;
+    } s_ctl_id_t;
+    #pragma pack(pop)
+
+
 
 #endif        
 
