@@ -1,8 +1,8 @@
 # esp32_lock
 
-Emulator network controller with lock_device (for testing external control server of parking)
+Emulator network controller with lock_device (Promix) for testing external control server of parking.
 
-esp32(DevKitC board) + st7789(spi) + leds for indication of events and device status
+esp32(DevKitC board) + st7789(spi) + leds for indication of events
 
 
 # Файлы пакета:

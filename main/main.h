@@ -196,6 +196,7 @@
 #define _950ms 95 * _10ms
 
 #define _1s   100 * _10ms
+#define _1s5  _1s + _500ms
 #define _2s     2 * _1s
 #define _3s     3 * _1s
 #define _4s     4 * _1s
@@ -205,6 +206,7 @@
 #define _20s   20 * _1s
 #define _25s   25 * _1s
 #define _30s   30 * _1s
+#define _60s   60 * _1s
 
 #define HALF_SEC _500ms
 
@@ -290,7 +292,9 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
 #endif
 
 #ifdef SET_PARK_CLI
-    #define SRV_IP_DEF "192.168.0.101"
+    #define SRV_IP_DEF "192.168.0.101"//"92.53.65.4"
+
+
     #define SRV_PORT_DEF 9889
 
     #define CMD_MARKER0 0x8a
@@ -307,8 +311,9 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
     #define zSTAT 5 // clen = 3, alen = 10, Команда «Передать флаги состояния устройств замка»    
     #define zLED  6 // clen = 4, alen =  0, Команда «Включение индикации «Мигание: Красный-зелёный»»
 
-    #define cMODE 0xbf // clen = 6, alen = 0, Команда «Включить режим прямого управления»
+    //#define cMODE 0xbf // clen = 6, alen = 0, Команда «Включить режим прямого управления»
     #define cSTAT 0xb2 // clen = 6, alen = 18, Команда «Передать состояние Promix-CN.LN.01»
+    #define aSTAT 0xb1 // clen = 6, alen = 4+...,  Команда «Передать текущее состояние СКУД»  
     #define cEVT 0xb8  // clen = 7, alen = 0, Команда «Установить вариант передачи событий»    
 
     #define zBIT0_OPEN     1//состояние замка (1- открыт, 0- закрыт),    
@@ -318,12 +323,15 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
     #define zBIT2_ID       4//Бит 2 – наличие идентификатора транспорта (1- вставлен, 0- отсутствует),
     #define zBIT2_NOID     0//Бит 2 – наличие идентификатора транспорта (1- вставлен, 0- отсутствует),    
     #define zBIT7_EXEC  0x80//Бит 7 – состояние включения замка (1- запуск, 0- работа),
-    #define zBIT7_WORK     0//Бит 7 – состояние включения замка (1- запуск, 0- работа),    
+    #define zBIT7_WORK     0//Бит 7 – состояние включения замка (1- запуск, 0- работа),  
 
-    #define MAX_CMD 9
+    #define LOCK_ONLINE    1
+    #define LOCK_OFFLINE   0
+
+    #define MAX_CMD 8
     #define MIN_CMD_LEN 3
-    #define MID_CMD_LEN 6    
-    #define MAX_CMD_LEN 7
+    #define MID_CMD_LEN 4    
+    #define MAX_CMD_LEN 6    
 
     enum {
         ZERO = 0,
@@ -333,8 +341,8 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
         TIZ_ZAMOK,
         STAT_ZAMOK,
         LED_ZAMOK,
-        MODE_CTL,
         STAT_CTL,
+        STAT_ALL,
         EVT_CTL
     };
 
@@ -343,7 +351,7 @@ esp_err_t save_param(const char *param_name, void *param_data, size_t len);
     {
         unsigned char alen;
         unsigned char dlen;
-        unsigned char data[7];
+        unsigned char data[6];
         char name[12];
     } s_one_cmd;
     #pragma pack(pop)
